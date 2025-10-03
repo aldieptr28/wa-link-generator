@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WA Link Generator & Storage (Final - Sempurna)</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .container { max-width: 900px; }
+        .form-floating label { color: #6c757d; }
+        #outputArea { min-height: 150px; }
+        /* Style untuk tombol link yang lebih jelas */
+        .btn-wa-action { 
+            font-weight: bold; 
+            white-space: nowrap; 
+            display: block; 
+            padding: 5px 10px;
+            text-decoration: none;
+            border-radius: 5px;
+            background-color: #25d366; /* Warna Hijau WhatsApp */
+            color: white;
+            text-align: center;
+        }
+        .btn-wa-action:hover {
+             background-color: #128c7e;
+             color: white;
+        }
+        .is-invalid + .invalid-feedback { display: block; }
+    </style>
+</head>
+<body>
+
+    <div class="container mt-5 mb-5 p-4 border rounded shadow-lg">
+        <h1 class="text-center mb-4 text-primary">WA Link Generator & Storage</h1>
+        <p class="text-center text-muted">Dilengkapi Fitur Normalisasi Karakter</p>
+
+        <div class="mb-3">
+            <label for="generateType" class="form-label fw-bold">Pilih Tipe Generate Nomor:</label>
+            <select class="form-select" id="generateType" onchange="toggleInput()">
+                <option value="single">Satu Nomor (Single Input)</option>
+                <option value="multiple">Banyak Nomor (Multiple Input)</option>
+            </select>
+        </div>
+
+ 
+        <div class="form-floating mb-1" id="singleInputContainer">
+            <input type="text" class="form-control" id="phoneNumberSingle" placeholder="Contoh: 08123456789">
+            <label for="phoneNumberSingle">Masukkan SATU Nomor Telepon (Contoh: 08123456789)</label>
+        </div>
+        <div class="mb-3" id="singleValidationFeedback">
+            <small class="form-text text-muted">Link akan otomatis dibuat di bawah.</small>
+        </div>
+
+        <div class="form-floating mb-3 d-none" id="multipleInputContainer">
+            <textarea class="form-control" placeholder="Masukkan banyak nomor, pisahkan dengan koma atau baris baru. Contoh: Bagas 0812..., 0857... Putri" id="phoneNumberMultiple" style="height: 150px;"></textarea>
+            <label for="phoneNumberMultiple">Masukkan BANYAK Nomor Telepon (Pisahkan dengan koma atau baris baru)</label>
+            <small class="form-text text-muted">Fitur AI akan menormalisasi, mengidentifikasi nama (di depan atau belakang), dan mengabaikan karakter asing.</small>
+        </div>
+
+        <div class="form-floating mb-4">
+            <textarea class="form-control" placeholder="Pesan Opsional" id="preFillMessage" style="height: 100px;"></textarea>
+            <label for="preFillMessage">Pesan Opsional untuk Pre-fill (Isi pesan otomatis di WA)</label>
+            <small class="form-text text-muted">Teks ini akan otomatis terisi di kolom pesan WhatsApp saat link dibuka.</small>
+        </div>
+        
+
+        <div class="d-grid mb-4">
+            <button class="btn btn-success fw-bold d-none" id="generateMultipleBtn" onclick="generateLinks()">GENERATE LINK (BANYAK NOMOR)</button>
+        </div>
+        
+        <div id="singleOutput" class="alert alert-info text-center d-none">
+            Link WA Anda: <a id="singleLinkOutput" href="#" target="_blank" class="btn-link-wa"></a>
+        </div>
+
+        <h3 class="mt-5 mb-3 text-secondary" id="historyTitle">Riwayat Generate & Output</h3>
+        <div class="card p-3 shadow-sm mb-4">
+            <div id="outputArea">
+                <p class="text-muted text-center" id="initialMessage">Hasil generate link dan riwayat Anda akan muncul di sini.</p>
+            </div>
+        </div>
+        
+        <div class="row g-2">
+            <div class="col-md-6 d-grid">
+                <button class="btn btn-warning" onclick="generatePdf()">Generate PDF & Download</button>
+            </div>
+            <div class="col-md-6 d-grid">
+                <button class="btn btn-danger" onclick="clearHistory()">Hapus Riwayat</button>
+            </div>
+        </div>
+        
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+
+    <script>
+        const singleInput = document.getElementById('phoneNumberSingle');
+        const preFillMessageInput = document.getElementById('preFillMessage');
+        const multipleInput = document.getElementById('phoneNumberMultiple');
+        const singleOutput = document.getElementById('singleOutput');
+        const singleLinkOutput = document.getElementById('singleLinkOutput');
+        const singleValidationFeedback = document.getElementById('singleValidationFeedback');
+        const outputArea = document.getElementById('outputArea');
+        const generateType = document.getElementById('generateType');
+        const generateMultipleBtn = document.getElementById('generateMultipleBtn');
+        const HISTORY_KEY = 'waLinkHistory';
+
+        // --- Fungsi Utama Normalisasi Nomor (AI Logic DITINGKATKAN DAN DIPERBAIKI) ---
+        function normalizeNumber(input) {
+            let name = '';
+            let numberOnly = input;
+            
+            // 1. Ekstraksi Nama dari Depan
+            // Mencari huruf/spasi di awal, diikuti oleh angka.
+            let nameMatchStart = numberOnly.match(/^([a-zA-Z\s]+)[\s,\-\(\)]*(\+?\d.*)/);
+            if (nameMatchStart) {
+                name = nameMatchStart[1].trim();
+                numberOnly = nameMatchStart[2];
+            } else {
+                // 2. Ekstraksi Nama dari Belakang (Perbaikan Utama)
+                // Mencari angka, diikuti oleh spasi/simbol, dan diakhiri oleh huruf/spasi
+                // Regex diperkuat untuk menangkap semua karakter huruf di akhir
+                let nameMatchEnd = numberOnly.match(/(\+?\d+[\d\s\-\(\)]*)[\s,\-\(\)]*([a-zA-Z\s]+)$/);
+                if (nameMatchEnd) {
+                    numberOnly = nameMatchEnd[1];
+                    name = nameMatchEnd[2].trim();
+                }
+            }
+
+            // Hapus semua karakter non-digit dari string nomor
+            let finalNumber = numberOnly.replace(/[^0-9]/g, '');
+
+            // 3. Normalisasi Angka Telepon ke 62
+            if (finalNumber.startsWith('62') && finalNumber.length > 10) {
+                 // Sudah 62xx, biarkan
+            } else if (finalNumber.startsWith('08')) {
+                finalNumber = '62' + finalNumber.substring(1);
+            } else if (finalNumber.startsWith('8') && finalNumber.length >= 9) {
+                finalNumber = '62' + finalNumber;
+            } else if (finalNumber.startsWith('0') && finalNumber.length > 5) { 
+                finalNumber = '62' + finalNumber.substring(1);
+            } else if (finalNumber.length >= 9) {
+                finalNumber = '62' + finalNumber;
+            }
+            
+            finalNumber = finalNumber.replace(/[^0-9]/g, '');
+
+            // Ambil pesan pre-fill
+            const message = preFillMessageInput.value.trim();
+            
+            const baseLink = `https://api.whatsapp.com/send?phone=${finalNumber}`;
+            let messageParam = '';
+            
+            if (message) {
+                messageParam = `&text=${encodeURIComponent(message)}`;
+            }
+
+            // Fallback: Jika nama masih kosong, coba ambil sisa huruf
+            if (name === '' && input.match(/[a-zA-Z]/)) {
+                let leftoverNameMatch = input.replace(finalNumber, '').match(/[a-zA-Z\s]+/);
+                if(leftoverNameMatch) {
+                    name = leftoverNameMatch[0].replace(/[\s,\-\(\)]/g, ' ').trim();
+                }
+            }
+
+            return {
+                number: finalNumber,
+                link: `${baseLink}${messageParam}`, 
+                name: name || '-'
+            };
+        }
+
+        // --- Fitur Validasi Visual Nomor ---
+        function validateNumberVisual(number) {
+            const minLength = 9; 
+            const maxLength = 13; 
+
+            const effectiveLength = number.startsWith('62') ? number.substring(2).length : number.length;
+
+            if (effectiveLength < minLength) {
+                return {
+                    isValid: false,
+                    message: `⚠️ Nomor terlalu pendek (${effectiveLength} digit). Link dibuat, namun mungkin tidak valid.`
+                };
+            } else if (effectiveLength > maxLength) {
+                 return {
+                    isValid: false,
+                    message: `⚠️ Nomor terlalu panjang (${effectiveLength} digit). Link dibuat, namun mungkin tidak valid.`
+                };
+            }
+             return {
+                isValid: true,
+                message: `✅ Nomor terlihat valid (${effectiveLength} digit).`
+            };
+        }
+
+        // --- 1.1. Fitur Single Input (Otomatis + Validasi) ---
+        singleInput.addEventListener('input', function() {
+            const rawNumber = this.value;
+            singleOutput.classList.add('d-none');
+            singleValidationFeedback.innerHTML = `<small class="form-text text-muted">Link akan otomatis dibuat di bawah.</small>`;
+
+            if (rawNumber.trim() === '') {
+                return;
+            }
+            
+            const normalized = normalizeNumber(rawNumber);
+            const validation = validateNumberVisual(normalized.number);
+            
+            let feedbackClass = validation.isValid ? 'text-success' : 'text-danger';
+            singleValidationFeedback.innerHTML = `<small class="form-text ${feedbackClass}">${validation.message}</small>`;
+            
+            singleLinkOutput.href = normalized.link;
+            singleLinkOutput.textContent = normalized.link;
+            singleOutput.classList.remove('d-none');
+        });
+
+        // --- 1.2. Fitur Multiple Input (Tabel & Local Storage) ---
+        function generateLinks() {
+            const rawInput = multipleInput.value;
+            if (rawInput.trim() === '') {
+                alert('Mohon masukkan minimal satu nomor telepon.');
+                return;
+            }
+
+            const rawNumbers = rawInput.split(/[,\n]/).map(item => item.trim()).filter(item => item.length > 0);
+            
+            let results = [];
+            rawNumbers.forEach((rawNum, index) => {
+                const normalized = normalizeNumber(rawNum);
+                results.push({
+                    id: Date.now() + index,
+                    name: normalized.name || '-',
+                    raw: rawNum,
+                    number: normalized.number,
+                    link: normalized.link,
+                    timestamp: new Date().toLocaleTimeString()
+                });
+            });
+
+            saveToLocalStorage(results);
+            renderHistory();
+        }
+
+        // --- 4. Local Storage Functions ---
+        function getHistory() {
+            const history = localStorage.getItem(HISTORY_KEY);
+            return history ? JSON.parse(history) : [];
+        }
+
+        function saveToLocalStorage(newResults) {
+            let history = getHistory();
+            history = history.concat(newResults);
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+        }
+
+        // --- Fungsi renderHistory yang Diperbarui untuk Tampilan Tombol Sempurna ---
+        function renderHistory() {
+            const history = getHistory();
+            if (history.length === 0) {
+                outputArea.innerHTML = `<p class="text-muted text-center" id="initialMessage">Hasil generate link dan riwayat Anda akan muncul di sini.</p>`;
+                return;
+            }
+            
+            let tableHTML = `<div class="table-responsive">
+                <table class="table table-striped table-bordered">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>#</th>
+                            <th>Nama/ID</th>
+                            <th>Nomor Asli</th>
+                            <th>Aksi (Kirim Pesan)</th> 
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            let currentNumber = 1;
+            history.forEach((item) => {
+                // Teks Tombol Hanya "KIRIM PESAN" (Sesuai permintaan)
+                const buttonText = "KIRIM PESAN";
+
+                tableHTML += `
+                    <tr>
+                        <td>${currentNumber++}</td>
+                        <td>${item.name}</td>
+                        <td class="text-break">${item.raw}</td>
+                        <td>
+                            <a href="${item.link}" target="_blank" class="btn-wa-action">
+                                ${buttonText}
+                            </a>
+                        </td> 
+                    </tr>
+                `;
+            });
+
+            tableHTML += `</tbody></table></div>`; 
+            outputArea.innerHTML = tableHTML;
+        }
+        
+        function clearHistory() {
+            if (confirm("Apakah Anda yakin ingin menghapus semua riwayat generate link?")) {
+                localStorage.removeItem(HISTORY_KEY);
+                renderHistory();
+                alert("Riwayat berhasil dihapus!");
+            }
+        }
+        
+        // --- 2. Fitur Generate PDF ---
+        function generatePdf() {
+            const history = getHistory();
+            if (history.length === 0) {
+                alert("Tidak ada data dalam riwayat untuk di-generate menjadi PDF.");
+                return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            const headers = [["No", "Nama/ID", "Nomor Asli", "Link WA"]];
+            const data = history.map((item, index) => [
+                index + 1,
+                item.name,
+                item.raw,
+                item.link
+            ]);
+
+            doc.text("WA Link Generator History", 14, 15);
+            doc.autoTable({
+                head: headers,
+                body: data,
+                startY: 20,
+                theme: 'striped',
+                headStyles: { fillColor: [33, 37, 41] },
+                columnStyles: {
+                    2: { cellWidth: 35 },
+                    3: { cellWidth: 70 }
+                }
+            });
+
+            doc.save(`WALink_Generated_${new Date().toISOString().slice(0, 10)}.pdf`);
+        }
+
+        // --- Toggles & Initial Load ---
+        function toggleInput() {
+            const type = generateType.value;
+            if (type === 'single') {
+                document.getElementById('singleInputContainer').classList.remove('d-none');
+                document.getElementById('multipleInputContainer').classList.add('d-none');
+                generateMultipleBtn.classList.add('d-none');
+                singleOutput.classList.remove('d-none'); 
+                singleInput.dispatchEvent(new Event('input')); 
+            } else {
+                document.getElementById('singleInputContainer').classList.add('d-none');
+                document.getElementById('multipleInputContainer').classList.remove('d-none');
+                generateMultipleBtn.classList.remove('d-none');
+                singleOutput.classList.add('d-none'); 
+                singleValidationFeedback.innerHTML = `<small class="form-text text-muted">Link akan otomatis dibuat di bawah.</small>`;
+            }
+            renderHistory();
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            toggleInput(); 
+            renderHistory();
+        });
+    </script>
+</body>
+</html>
