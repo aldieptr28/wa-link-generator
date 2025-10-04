@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Sender Massal - Stabil</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    
+    <style>
+        .container { max-width: 900px; }
+        .form-floating label { color: #6c757d; }
+    </style>
+</head>
+<body>
+
+    <div class="container mt-5 mb-5 p-4 border rounded shadow-lg">
+        <h1 class="text-center mb-4 text-info">Email Sender Massal</h1>
+        <p class="text-center text-muted">Menggunakan Pengirim Statis dan Terverifikasi (Paling Anti-Spam).</p>
+        
+        <div class="d-flex justify-content-end mb-4">
+            <a href="index.html" class="btn btn-secondary btn-sm">Kembali ke WA Generator</a>
+        </div>
+        
+        <div class="mb-3">
+            <label for="emailType" class="form-label fw-bold">Pilih Tipe Pengiriman:</label>
+            <select class="form-select" id="emailType" onchange="toggleEmailInput()">
+                <option value="single">Satu Email (Single Input)</option>
+                <option value="multiple">Banyak Email (Multiple Input)</option>
+            </select>
+        </div>
+        
+        <div class="form-floating mb-3">
+            <input type="text" class="form-control" id="emailSubject" placeholder="Subjek Email">
+            <label for="emailSubject">Subjek Email</label>
+            <small class="form-text text-info">Subjek ini dikirim ke variabel `subject_line`.</small>
+        </div>
+
+        <div class="form-floating mb-3" id="singleEmailInputContainer">
+            <input type="email" class="form-control" id="emailRecipientSingle" placeholder="contoh@gmail.com">
+            <label for="emailRecipientSingle">Alamat Email Penerima</label>
+        </div>
+        
+        <div class="form-floating mb-3 d-none" id="multipleEmailInputContainer">
+            <textarea class="form-control" placeholder="Email1@a.com, Email2@b.com" id="emailRecipientsMultiple" style="height: 100px;"></textarea>
+            <label for="emailRecipientsMultiple">Daftar Email Penerima (Pisahkan dg koma atau baris baru)</label>
+        </div>
+        
+        <div class="form-floating mb-4">
+            <textarea class="form-control" placeholder="Isi pesan email" id="emailContent" style="height: 150px;"></textarea>
+            <label for="emailContent">Isi Pesan Email</label>
+        </div>
+
+        <div class="d-grid gap-2">
+            <button class="btn btn-primary fw-bold" id="sendEmailBtn" onclick="sendEmails()">KIRIM EMAIL</button>
+        </div>
+        
+        <div id="statusMessage" class="mt-4 alert d-none"></div>
+
+        <h4 class="mt-5 mb-3 text-secondary">Log Status Pengiriman:</h4>
+        <div class="card p-3 mb-5">
+            <ul id="logList" class="list-group list-group-flush"></ul>
+        </div>
+    </div>
+    
+    <script type="text/javascript">
+       (function(){
+          // GANTI PUBLIC KEY (USER ID) ANDA DI SINI
+          emailjs.init({
+            publicKey: "r5i22xW-0khoMva8S", 
+          });
+       })();
+    </script>
+
+    <script>
+        // ==========================================================
+        //         1. KREDENSIAL LAINNYA (DARI DASHBOARD EMAILJS)
+        // ==========================================================
+        const EMAILJS_SERVICE_ID = 'service_frivcj4'; // GANTI DENGAN ID SERVICE ANDA
+        const EMAILJS_TEMPLATE_ID = 'template_25rnqbr'; // GANTI DENGAN ID TEMPLATE ANDA
+        // ==========================================================
+        
+        const emailTypeInput = document.getElementById('emailType');
+        const singleEmailInput = document.getElementById('emailRecipientSingle');
+        const multipleEmailInput = document.getElementById('emailRecipientsMultiple');
+        const emailSubjectInput = document.getElementById('emailSubject');
+        const emailContentInput = document.getElementById('emailContent');
+        const sendEmailBtn = document.getElementById('sendEmailBtn');
+        const statusMessage = document.getElementById('statusMessage');
+        const logList = document.getElementById('logList');
+        
+        // Catatan: fromNameInput sudah dihapus dari HTML/JS karena kita menggunakan nama statis.
+        
+        // --- Logika AI Normalisasi Email ---
+        function normalizeEmails(rawInput) {
+            let normalizedInput = rawInput.trim();
+            normalizedInput = normalizedInput.replace(/(\.com)(?=[a-zA-Z])/g, '$1,'); 
+            normalizedInput = normalizedInput.replace(/(\.id)(?=[a-zA-Z])/g, '$1,'); 
+            normalizedInput = normalizedInput.replace(/(\.net)(?=[a-zA-Z])/g, '$1,'); 
+            
+            const emails = normalizedInput.split(/[,\n\s]+/)
+                                            .map(email => email.trim())
+                                            .filter(email => email.includes('@') && email.length > 5);
+            return emails;
+        }
+
+        // --- Fungsi untuk mencatat ke log status ---
+        function addLog(type, message) {
+            const time = new Date().toLocaleTimeString();
+            const listItem = document.createElement('li');
+            listItem.classList.add('list-group-item');
+
+            let classType = 'text-secondary';
+            if (type === 'success') classType = 'text-success fw-bold';
+            else if (type === 'error') classType = 'text-danger fw-bold';
+            else if (type === 'info') classType = 'text-primary';
+
+            listItem.innerHTML = `<small class="${classType}">[${time}] ${message}</small>`;
+            logList.prepend(listItem); 
+        }
+
+        // --- Fungsi Utama Pengiriman Email ---
+        async function sendEmails() {
+            logList.innerHTML = ''; 
+            const isMultiple = emailTypeInput.value === 'multiple';
+            
+            const rawInput = isMultiple ? multipleEmailInput.value : singleEmailInput.value;
+            const recipients = normalizeEmails(rawInput);
+            
+            const subject = emailSubjectInput.value.trim();
+            const content = emailContentInput.value.trim();
+            
+            // Validasi: Hanya cek Subjek dan Konten (karena Pengirim sudah statis/default)
+            if (recipients.length === 0 || subject === '' || content === '') {
+                displayStatus('error', 'Gagal: Pastikan alamat email, subjek, dan isi pesan terisi.');
+                return;
+            }
+
+            if (!isMultiple && recipients.length > 1) {
+                 displayStatus('error', 'Gagal: Mode "Satu Email" hanya boleh berisi 1 alamat.');
+                 return;
+            }
+
+            if (!confirm(`Anda akan mengirim ${recipients.length} email. Lanjutkan?`)) {
+                return;
+            }
+
+            sendEmailBtn.disabled = true;
+            sendEmailBtn.textContent = isMultiple ? 'Mengirim... 0%' : 'Mengirim...';
+            displayStatus('info', `Memulai pengiriman ke ${recipients.length} alamat...`);
+            
+            let sentCount = 0;
+            const delay = 50; 
+
+            for (let i = 0; i < recipients.length; i++) {
+                const recipientEmail = recipients[i];
+                
+                // DATA YANG DIKIRIM KE TEMPLATE
+                const templateParams = {
+                    to_email: recipientEmail, 
+                    subject_line: subject,
+                    message_body: content, 
+                    // from_name TIDAK DIKIRIM KARENA MENGGUNAKAN NAMA STATIS DI TEMPLATE
+                };
+
+                addLog('info', `[${i + 1}/${recipients.length}] Mencoba kirim ke: ${recipientEmail}`);
+
+                try {
+                    await new Promise(resolve => setTimeout(resolve, delay)); 
+                    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+                    
+                    sentCount++;
+                    const progress = Math.round((sentCount / recipients.length) * 100);
+                    sendEmailBtn.textContent = `Mengirim... ${progress}%`;
+                    addLog('success', `[${i + 1}/${recipients.length}] BERHASIL diterima API.`);
+
+                } catch (error) {
+                    addLog('error', `[${i + 1}/${recipients.length}] GAGAL! ${error.text || error}`);
+                    console.error(`Gagal ke ${recipientEmail}:`, error);
+                }
+            }
+
+            // Selesai
+            const successMsg = `Selesai! Berhasil mengirim ${sentCount} dari ${recipients.length} email.`;
+            displayStatus(sentCount === recipients.length ? 'success' : 'warning', successMsg);
+            sendEmailBtn.disabled = false;
+            sendEmailBtn.textContent = isMultiple ? 'KIRIM SEMUA EMAIL' : 'KIRIM EMAIL';
+        }
+        
+        // --- Fungsi Toggle Input dan Tampilan Status ---
+        function toggleEmailInput() {
+            const isMultiple = emailTypeInput.value === 'multiple';
+            document.getElementById('singleEmailInputContainer').classList.toggle('d-none', isMultiple);
+            document.getElementById('multipleEmailInputContainer').classList.toggle('d-none', !isMultiple);
+            
+            sendEmailBtn.textContent = isMultiple ? 'KIRIM SEMUA EMAIL' : 'KIRIM EMAIL';
+        }
+
+        function displayStatus(type, message) {
+            statusMessage.classList.remove('d-none', 'alert-success', 'alert-danger', 'alert-info', 'alert-warning');
+            statusMessage.textContent = message;
+            
+            if (type === 'success') statusMessage.classList.add('alert-success');
+            else if (type === 'error') statusMessage.classList.add('alert-danger');
+            else if (type === 'warning') statusMessage.classList.add('alert-warning');
+            else statusMessage.classList.add('alert-info');
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            toggleEmailInput();
+        });
+    </script>
+</body>
+</html>
